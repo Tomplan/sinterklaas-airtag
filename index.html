@@ -12824,6 +12824,9 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       var searchSession = 0;
       var searchActive = false;
       var searchPace = 0;
+      var speechTimer = null;
+      var speechSession = 0;
+      var successQuote = "Wie heeft dat nu weer hier gelegd!";
       var placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700"><rect width="1000" height="700" fill="#141416"/><rect x="50" y="45" width="900" height="610" rx="8" fill="#252528" stroke="#616166" stroke-width="12"/><path d="M500 45v610M50 350h900" fill="none" stroke="#616166" stroke-width="10"/><path d="M500 155v75M500 465v75M220 350h90M690 350h90" stroke="#252528" stroke-width="14"/><g fill="#38383c" stroke="#77777d" stroke-width="4"><rect x="130" y="125" width="240" height="100" rx="20"/><rect x="620" y="115" width="220" height="120" rx="8"/><rect x="160" y="465" width="200" height="110" rx="55"/><rect x="650" y="445" width="180" height="150" rx="6"/></g><g fill="#b4b4ba" font-family="Arial,sans-serif" font-size="26" text-anchor="middle"><text x="250" y="275">BANK</text><text x="730" y="275">KEUKEN</text><text x="260" y="625">TAFEL</text><text x="740" y="625">KAST</text></g></svg>';
 
       function sizeApp() {
@@ -13087,6 +13090,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           stopSearch();
           return;
         }
+        stopSpeech();
         searchActive = true;
         session = ++searchSession;
         searchPace = Math.random() * 0.15;
@@ -13122,6 +13126,60 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         }
       }
 
+      function stopSpeech() {
+        speechSession += 1;
+        if (speechTimer !== null) {
+          window.clearTimeout(speechTimer);
+          speechTimer = null;
+        }
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      }
+
+      function announceSuccess(soundWorked) {
+        var session;
+        var utterance;
+        var voices;
+        var i;
+        stopSpeech();
+        session = speechSession;
+        message.textContent = "“" + successQuote + "”" + (soundWorked ? "" : " Het succesgeluid is niet beschikbaar.");
+        if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+          message.textContent += " Gesproken tekst is niet beschikbaar op dit apparaat.";
+          return;
+        }
+        speechTimer = window.setTimeout(function () {
+          speechTimer = null;
+          if (session !== speechSession) {
+            return;
+          }
+          try {
+            utterance = new SpeechSynthesisUtterance(successQuote);
+            utterance.lang = "nl-NL";
+            utterance.rate = 1;
+            utterance.pitch = 1.15;
+            voices = window.speechSynthesis.getVoices();
+            for (i = 0; i < voices.length; i += 1) {
+              if (/^nl[-_]/i.test(voices[i].lang)) {
+                utterance.voice = voices[i];
+                break;
+              }
+            }
+            utterance.onerror = function () {
+              if (session === speechSession) {
+                message.textContent += " Gesproken tekst kon niet worden afgespeeld.";
+              }
+            };
+            window.speechSynthesis.speak(utterance);
+          } catch (error) {
+            if (session === speechSession) {
+              message.textContent += " Gesproken tekst kon niet worden afgespeeld.";
+            }
+          }
+        }, soundWorked ? 850 : 0);
+      }
+
       function stopScanner() {
         var tracks;
         var i;
@@ -13147,7 +13205,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         stopScanner();
         stopSearch();
         soundWorked = playSuccess();
-        message.textContent = soundWorked ? "" : "Geluid is niet beschikbaar op dit apparaat.";
+        announceSuccess(soundWorked);
         index += 1;
         if (index < gifts.length) {
           showGift();
@@ -13194,6 +13252,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
       function startScanner() {
         var session;
+        stopSpeech();
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !scanContext) {
           message.textContent = "Deze Safari-versie ondersteunt de QR-scanner niet. Probeer een nieuwere iPad of Safari.";
           return;
@@ -13282,6 +13341,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           adminActive = true;
           stopScanner();
           stopSearch();
+          stopSpeech();
           taps = [];
           admin.className = "admin active";
           coordinates.textContent = "CONFIGURATIEMODUS: tik op de plattegrond";
@@ -13323,10 +13383,12 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       window.addEventListener("pagehide", function () {
         stopScanner();
         stopSearch();
+        stopSpeech();
       });
       document.addEventListener("visibilitychange", function () {
         if (document.hidden) {
           stopSearch();
+          stopSpeech();
         }
       });
       map.addEventListener("click", function (event) {
