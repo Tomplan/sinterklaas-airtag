@@ -27,8 +27,10 @@
     .eyebrow { margin: 0 0 5px; color: #30d158; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
     h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.15; }
     .hint { margin: 0 0 15px; color: #c7c7cc; font-size: 16px; line-height: 1.35; }
-    .controls { display: -webkit-flex; display: flex; }
-    .controls button { height: 48px; padding: 0 20px; border: 0; border-radius: 10px; background: #30d158; color: #062c10; font-weight: 700; cursor: pointer; }
+    .controls { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+    .controls button { min-height: 48px; margin: 0 10px 6px 0; padding: 0 20px; border: 0; border-radius: 10px; background: #30d158; color: #062c10; font-weight: 700; cursor: pointer; }
+    .controls .search-button { background: #2c2c2e; color: #fff; }
+    .controls .search-button.active { background: #ff9f0a; color: #241400; }
     .message { min-height: 18px; margin: 8px 0 0; color: #ff9f0a; font-size: 13px; line-height: 1.3; }
     .finished { display: none; color: #30d158; font-size: 17px; line-height: 1.4; }
     .editor { display: none; -webkit-flex: none; flex: none; max-height: 48%; overflow-y: auto; margin: 8px 16px 16px; padding: 16px; border-radius: 20px; background: #1c1c1e; -webkit-overflow-scrolling: touch; }
@@ -97,7 +99,10 @@
       <p class="eyebrow">Locatie gevonden</p>
       <h1 id="gift-title"></h1>
       <p class="hint" id="hint"></p>
-      <div class="controls" id="scan-controls"><button type="button" id="scan">Scan QR-code</button></div>
+      <div class="controls" id="scan-controls">
+        <button type="button" class="search-button" id="search" aria-pressed="false">Start zoekactie</button>
+        <button type="button" id="scan">Scan QR-code</button>
+      </div>
       <p class="message" id="message" role="status" aria-live="polite"></p>
       <div class="finished" id="finished" role="status"></div>
     </section>
@@ -12770,6 +12775,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
      * verschijnt automatisch de ingebouwde voorbeeldplattegrond.
      * Tik vijf keer snel op de titel om de configuratiemodus te openen.
      * Print daar de QR-kaartjes en leg ieder kaartje bij het juiste cadeau.
+     * Het zoekgeluid varieert willekeurig en meet geen echte afstand.
      */
     var gifts = /* BEGIN GIFTS */[
       {"title":"Cadeau 1","hint":"Zoek bij de bank. En geef je vrouw dit keer niet meteen de schuld!","x":27,"y":30,"code":"123"},
@@ -12792,6 +12798,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       var coordinates = document.getElementById("coordinates");
       var message = document.getElementById("message");
       var scanControls = document.getElementById("scan-controls");
+      var searchButton = document.getElementById("search");
       var scanner = document.getElementById("scanner");
       var scannerMessage = document.getElementById("scanner-message");
       var camera = document.getElementById("camera");
@@ -12813,6 +12820,10 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       var selected = 0;
       var publishing = false;
       var audioContext;
+      var searchTimer = null;
+      var searchSession = 0;
+      var searchActive = false;
+      var searchPace = 0;
       var placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700"><rect width="1000" height="700" fill="#141416"/><rect x="50" y="45" width="900" height="610" rx="8" fill="#252528" stroke="#616166" stroke-width="12"/><path d="M500 45v610M50 350h900" fill="none" stroke="#616166" stroke-width="10"/><path d="M500 155v75M500 465v75M220 350h90M690 350h90" stroke="#252528" stroke-width="14"/><g fill="#38383c" stroke="#77777d" stroke-width="4"><rect x="130" y="125" width="240" height="100" rx="20"/><rect x="620" y="115" width="220" height="120" rx="8"/><rect x="160" y="465" width="200" height="110" rx="55"/><rect x="650" y="445" width="180" height="150" rx="6"/></g><g fill="#b4b4ba" font-family="Arial,sans-serif" font-size="26" text-anchor="middle"><text x="250" y="275">BANK</text><text x="730" y="275">KEUKEN</text><text x="260" y="625">TAFEL</text><text x="740" y="625">KAST</text></g></svg>';
 
       function sizeApp() {
@@ -12995,28 +13006,116 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         });
       }
 
-      function playSound() {
+      function prepareAudio(callback) {
         var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        var oscillator;
-        var gain;
-        var now;
         if (!AudioContextClass) {
-          return false;
+          callback(false);
+          return;
         }
         try {
           audioContext = audioContext || new AudioContextClass();
-          oscillator = audioContext.createOscillator();
-          gain = audioContext.createGain();
-          now = audioContext.currentTime;
-          oscillator.type = "sine";
-          oscillator.frequency.setValueAtTime(660, now);
-          oscillator.frequency.setValueAtTime(880, now + 0.1);
-          gain.gain.setValueAtTime(0.12, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-          oscillator.connect(gain);
-          gain.connect(audioContext.destination);
-          oscillator.start(now);
-          oscillator.stop(now + 0.3);
+          if (audioContext.state === "suspended" && audioContext.resume) {
+            audioContext.resume().then(function () {
+              callback(audioContext.state === "running");
+            }, function () { callback(false); });
+          } else {
+            callback(!audioContext.state || audioContext.state === "running");
+          }
+        } catch (error) {
+          callback(false);
+        }
+      }
+
+      function tone(frequency, endFrequency, delay, duration, volume, type) {
+        var oscillator = audioContext.createOscillator();
+        var gain = audioContext.createGain();
+        var start = audioContext.currentTime + delay;
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, start);
+        oscillator.frequency.exponentialRampToValueAtTime(endFrequency, start + duration);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.linearRampToValueAtTime(volume, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(start);
+        oscillator.stop(start + duration);
+      }
+
+      function stopSearch() {
+        searchSession += 1;
+        searchActive = false;
+        if (searchTimer !== null) {
+          window.clearTimeout(searchTimer);
+          searchTimer = null;
+        }
+        searchButton.textContent = "Start zoekactie";
+        searchButton.className = "search-button";
+        searchButton.setAttribute("aria-pressed", "false");
+      }
+
+      function searchBeep(session) {
+        var delay;
+        var frequency;
+        if (!searchActive || session !== searchSession) {
+          return;
+        }
+        if (audioContext.state && audioContext.state !== "running") {
+          stopSearch();
+          message.textContent = "Het zoekgeluid is onderbroken. Start de zoekactie opnieuw.";
+          return;
+        }
+        try {
+          frequency = 620 + Math.random() * 230 + searchPace * 200;
+          tone(frequency, frequency * 1.08, 0, 0.09, 0.07, "sine");
+        } catch (error) {
+          stopSearch();
+          message.textContent = "Het zoekgeluid kon niet worden afgespeeld. Controleer het geluid en probeer opnieuw.";
+          return;
+        }
+        searchPace += 0.05 + Math.random() * 0.12;
+        if (searchPace > 1 || Math.random() < 0.08) {
+          searchPace = Math.random() * 0.2;
+        }
+        delay = 1000 - searchPace * 740 + Math.random() * 280;
+        searchTimer = window.setTimeout(function () { searchBeep(session); }, delay);
+      }
+
+      function toggleSearch() {
+        var session;
+        if (searchActive) {
+          stopSearch();
+          return;
+        }
+        searchActive = true;
+        session = ++searchSession;
+        searchPace = Math.random() * 0.15;
+        searchButton.textContent = "Stop zoekactie";
+        searchButton.className = "search-button active";
+        searchButton.setAttribute("aria-pressed", "true");
+        message.textContent = "";
+        prepareAudio(function (ready) {
+          if (!searchActive || session !== searchSession) {
+            return;
+          }
+          if (!ready) {
+            stopSearch();
+            message.textContent = "Geluid is niet beschikbaar. Controleer het geluid van de iPad en probeer opnieuw.";
+            return;
+          }
+          searchBeep(session);
+        });
+      }
+
+      function playSuccess() {
+        if (!audioContext || (audioContext.state && audioContext.state !== "running")) {
+          return false;
+        }
+        try {
+          tone(520, 620, 0, 0.12, 0.09, "sine");
+          tone(680, 800, 0.12, 0.12, 0.09, "sine");
+          tone(900, 520, 0.24, 0.24, 0.1, "triangle");
+          tone(580, 1050, 0.48, 0.3, 0.1, "sine");
           return true;
         } catch (error) {
           return false;
@@ -13046,7 +13145,8 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       function foundGift() {
         var soundWorked;
         stopScanner();
-        soundWorked = playSound();
+        stopSearch();
+        soundWorked = playSuccess();
         message.textContent = soundWorked ? "" : "Geluid is niet beschikbaar op dit apparaat.";
         index += 1;
         if (index < gifts.length) {
@@ -13098,6 +13198,11 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           message.textContent = "Deze Safari-versie ondersteunt de QR-scanner niet. Probeer een nieuwere iPad of Safari.";
           return;
         }
+        prepareAudio(function (ready) {
+          if (!ready) {
+            message.textContent = "Geluid is niet beschikbaar; scannen kan nog steeds.";
+          }
+        });
         scanner.className = "scanner active";
         scannerMessage.textContent = "Geef toestemming voor de camera en richt hem op de QR-code.";
         session = ++scanSession;
@@ -13176,6 +13281,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           }
           adminActive = true;
           stopScanner();
+          stopSearch();
           taps = [];
           admin.className = "admin active";
           coordinates.textContent = "CONFIGURATIEMODUS: tik op de plattegrond";
@@ -13211,9 +13317,18 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       editHint.addEventListener("input", updateDraft);
       publishButton.addEventListener("click", publish);
       document.getElementById("print-cards").addEventListener("click", printCards);
+      searchButton.addEventListener("click", toggleSearch);
       document.getElementById("scan").addEventListener("click", startScanner);
       document.getElementById("stop-scan").addEventListener("click", stopScanner);
-      window.addEventListener("pagehide", stopScanner);
+      window.addEventListener("pagehide", function () {
+        stopScanner();
+        stopSearch();
+      });
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+          stopSearch();
+        }
+      });
       map.addEventListener("click", function (event) {
         var rect;
         if (!adminActive) {
