@@ -32,6 +32,7 @@
     .controls .search-button { background: #2c2c2e; color: #fff; }
     .controls .search-button.active { background: #ff9f0a; color: #241400; }
     .message { min-height: 18px; margin: 8px 0 0; color: #ff9f0a; font-size: 13px; line-height: 1.3; }
+    .replay { display: none; margin-top: 6px; padding: 8px 12px; border: 1px solid #636366; border-radius: 8px; background: #2c2c2e; color: #fff; cursor: pointer; }
     .finished { display: none; color: #30d158; font-size: 17px; line-height: 1.4; }
     .editor { display: none; -webkit-flex: none; flex: none; max-height: 48%; overflow-y: auto; margin: 8px 16px 16px; padding: 16px; border-radius: 20px; background: #1c1c1e; -webkit-overflow-scrolling: touch; }
     .editor.active { display: block; }
@@ -104,6 +105,7 @@
         <button type="button" id="scan">Scan QR-code</button>
       </div>
       <p class="message" id="message" role="status" aria-live="polite"></p>
+      <button type="button" class="replay" id="replay-speech">Beluister de reactie</button>
       <div class="finished" id="finished" role="status"></div>
     </section>
     <section class="editor" id="editor" aria-labelledby="editor-title">
@@ -12825,7 +12827,10 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       var searchActive = false;
       var searchPace = 0;
       var speechTimer = null;
+      var speechWatchdog = null;
       var speechSession = 0;
+      var lastQuote = "";
+      var replaySpeech = document.getElementById("replay-speech");
       var successQuotes = [
         "Wie heeft dat nu weer hier gelegd!",
         "Kijk eens aan! En deze zat niet eens in je broekzak!",
@@ -13008,6 +13013,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
             index = 0;
             scanControls.style.display = "";
             document.getElementById("finished").style.display = "none";
+            replaySpeech.style.display = "none";
             message.textContent = "";
             finishPublishing("Opgeslagen op GitHub! De website wordt bijgewerkt; dit kan enkele minuten duren.");
           });
@@ -13137,50 +13143,82 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           window.clearTimeout(speechTimer);
           speechTimer = null;
         }
+        if (speechWatchdog !== null) {
+          window.clearTimeout(speechWatchdog);
+          speechWatchdog = null;
+        }
         if (window.speechSynthesis) {
           window.speechSynthesis.cancel();
         }
       }
 
-      function announceSuccess(soundWorked, quote) {
-        var session;
+      function primeSpeech() {
+        var utterance;
+        if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+          return;
+        }
+        try {
+          utterance = new SpeechSynthesisUtterance(" ");
+          utterance.volume = 0;
+          utterance.lang = "nl-NL";
+          window.speechSynthesis.speak(utterance);
+        } catch (error) {
+          message.textContent = "De stem kon niet worden voorbereid; je kunt na het scannen op ‘Beluister de reactie’ tikken.";
+        }
+      }
+
+      function speakQuote(quote, session) {
         var utterance;
         var voices;
         var i;
-        stopSpeech();
-        session = speechSession;
-        message.textContent = "“" + quote + "”" + (soundWorked ? "" : " Het succesgeluid is niet beschikbaar.");
+        function failed() {
+          if (session === speechSession) {
+            if (speechWatchdog !== null) {
+              window.clearTimeout(speechWatchdog);
+              speechWatchdog = null;
+            }
+            message.textContent = "“" + quote + "” Tik op ‘Beluister de reactie’ als je de stem niet hoort.";
+          }
+        }
         if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-          message.textContent += " Gesproken tekst is niet beschikbaar op dit apparaat.";
+          message.textContent = "“" + quote + "” Gesproken tekst is niet beschikbaar op dit apparaat.";
           return;
         }
+        try {
+          utterance = new SpeechSynthesisUtterance(quote);
+          utterance.lang = "nl-NL";
+          utterance.rate = 1;
+          utterance.pitch = 1.15;
+          voices = window.speechSynthesis.getVoices();
+          for (i = 0; i < voices.length; i += 1) {
+            if (/^nl[-_]/i.test(voices[i].lang)) {
+              utterance.voice = voices[i];
+              break;
+            }
+          }
+          utterance.onstart = function () {
+            if (session === speechSession && speechWatchdog !== null) {
+              window.clearTimeout(speechWatchdog);
+              speechWatchdog = null;
+            }
+          };
+          utterance.onerror = failed;
+          speechWatchdog = window.setTimeout(failed, 4000);
+          window.speechSynthesis.speak(utterance);
+        } catch (error) {
+          failed();
+        }
+      }
+
+      function announceSuccess(soundWorked, quote) {
+        var session = ++speechSession;
+        lastQuote = quote;
+        replaySpeech.style.display = "inline-block";
+        message.textContent = "“" + quote + "”" + (soundWorked ? "" : " Het succesgeluid is niet beschikbaar.");
         speechTimer = window.setTimeout(function () {
           speechTimer = null;
-          if (session !== speechSession) {
-            return;
-          }
-          try {
-            utterance = new SpeechSynthesisUtterance(quote);
-            utterance.lang = "nl-NL";
-            utterance.rate = 1;
-            utterance.pitch = 1.15;
-            voices = window.speechSynthesis.getVoices();
-            for (i = 0; i < voices.length; i += 1) {
-              if (/^nl[-_]/i.test(voices[i].lang)) {
-                utterance.voice = voices[i];
-                break;
-              }
-            }
-            utterance.onerror = function () {
-              if (session === speechSession) {
-                message.textContent += " Gesproken tekst kon niet worden afgespeeld.";
-              }
-            };
-            window.speechSynthesis.speak(utterance);
-          } catch (error) {
-            if (session === speechSession) {
-              message.textContent += " Gesproken tekst kon niet worden afgespeeld.";
-            }
+          if (session === speechSession) {
+            speakQuote(quote, session);
           }
         }, soundWorked ? 850 : 0);
       }
@@ -13262,6 +13300,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
           message.textContent = "Deze Safari-versie ondersteunt de QR-scanner niet. Probeer een nieuwere iPad of Safari.";
           return;
         }
+        primeSpeech();
         prepareAudio(function (ready) {
           if (!ready) {
             message.textContent = "Geluid is niet beschikbaar; scannen kan nog steeds.";
@@ -13385,6 +13424,11 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       searchButton.addEventListener("click", toggleSearch);
       document.getElementById("scan").addEventListener("click", startScanner);
       document.getElementById("stop-scan").addEventListener("click", stopScanner);
+      replaySpeech.addEventListener("click", function () {
+        stopSpeech();
+        message.textContent = "“" + lastQuote + "”";
+        speakQuote(lastQuote, speechSession);
+      });
       window.addEventListener("pagehide", function () {
         stopScanner();
         stopSearch();
