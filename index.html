@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>AirTag XL - Autosleutel Pro</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; background: #000; color: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+    button, input { font: inherit; }
+    .app { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; overflow: hidden; }
+    .admin { display: none; padding: 9px 16px; background: #ff9f0a; color: #241400; font-size: 15px; font-weight: bold; }
+    .admin.active { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between; }
+    .admin button { margin-left: 12px; padding: 6px 10px; border: 1px solid #633b00; border-radius: 8px; background: transparent; color: #241400; font-weight: bold; cursor: pointer; }
+    .status { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between; padding: 16px 20px; }
+    .brand { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-width: 0; padding: 0; border: 0; background: transparent; color: #fff; text-align: left; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .status-dot { -webkit-flex: none; flex: none; width: 10px; height: 10px; margin-right: 10px; border-radius: 50%; background: #30d158; box-shadow: 0 0 12px #30d158; -webkit-animation: glow 1.8s ease-in-out infinite; animation: glow 1.8s ease-in-out infinite; }
+    .counter { -webkit-flex: none; flex: none; margin-left: 12px; color: #98989d; font-size: 13px; white-space: nowrap; }
+    .map { position: relative; -webkit-flex: 1 1 0; flex: 1 1 0; min-height: 0; overflow: hidden; cursor: pointer; }
+    .map img { position: absolute; top: 50%; left: 50%; display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); }
+    .radar { position: absolute; z-index: 1; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 3px solid #fff; border-radius: 50%; background: #30d158; box-shadow: 0 0 18px rgba(48, 209, 88, .8); pointer-events: none; -webkit-transition: left .8s ease, top .8s ease; transition: left .8s ease, top .8s ease; }
+    .radar.direct { -webkit-transition: none; transition: none; }
+    .radar:after { position: absolute; top: -3px; left: -3px; width: 22px; height: 22px; border-radius: 50%; background: rgba(48, 209, 88, .6); content: ""; -webkit-animation: pulse 2s ease-out infinite; animation: pulse 2s ease-out infinite; }
+    .panel { -webkit-flex: none; flex: none; margin: 12px 16px 16px; padding: 20px; border-radius: 20px; background: #1c1c1e; }
+    .eyebrow { margin: 0 0 5px; color: #30d158; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+    h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.15; }
+    .hint { margin: 0 0 15px; color: #c7c7cc; font-size: 16px; line-height: 1.35; }
+    .controls { display: -webkit-flex; display: flex; }
+    .controls input { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; height: 48px; padding: 0 14px; border: 1px solid #48484a; border-radius: 10px; outline: none; background: #2c2c2e; color: #fff; font-size: 18px; letter-spacing: 3px; }
+    .controls input:focus { border-color: #30d158; }
+    .controls button { -webkit-flex: none; flex: none; height: 48px; margin-left: 10px; padding: 0 20px; border: 0; border-radius: 10px; background: #30d158; color: #062c10; font-weight: 700; cursor: pointer; }
+    .message { min-height: 18px; margin: 8px 0 0; color: #ff9f0a; font-size: 13px; line-height: 1.3; }
+    .finished { display: none; color: #30d158; font-size: 17px; line-height: 1.4; }
+    @-webkit-keyframes glow { 50% { opacity: .5; } }
+    @keyframes glow { 50% { opacity: .5; } }
+    @-webkit-keyframes pulse { 0% { opacity: .7; -webkit-transform: scale(1); } 100% { opacity: 0; -webkit-transform: scale(3); } }
+    @keyframes pulse { 0% { opacity: .7; transform: scale(1); } 100% { opacity: 0; transform: scale(3); } }
+    @media (max-height: 520px) {
+      .status { padding: 10px 16px; }
+      .panel { margin: 8px 12px 10px; padding: 12px 16px; }
+      h1 { font-size: 20px; }
+      .hint { margin-bottom: 8px; font-size: 14px; }
+      .controls input, .controls button { height: 40px; }
+    }
+    @media (max-width: 430px) {
+      .status { padding-left: 12px; padding-right: 12px; }
+      .brand { font-size: 14px; }
+      .counter { font-size: 11px; }
+      .panel { margin-left: 10px; margin-right: 10px; }
+      .controls button { padding: 0 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .status-dot, .radar:after { -webkit-animation: none; animation: none; }
+      .radar { -webkit-transition: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="admin" id="admin">
+      <span id="coordinates">CONFIGURATIEMODUS: tik op de plattegrond</span>
+      <button type="button" id="close-admin">Sluiten</button>
+    </div>
+    <header class="status">
+      <button type="button" class="brand" id="brand"><span class="status-dot"></span><span>AirTag XL - Autosleutel Pro</span></button>
+      <span class="counter" id="counter"></span>
+    </header>
+    <main class="map" id="map" aria-label="Plattegrond met de locatie van het cadeau">
+      <img id="floorplan" src="plattegrond.png" alt="Plattegrond met de locatie van het cadeau">
+      <span class="radar" id="radar" aria-hidden="true"></span>
+    </main>
+    <section class="panel" aria-labelledby="gift-title">
+      <p class="eyebrow">Locatie gevonden</p>
+      <h1 id="gift-title"></h1>
+      <p class="hint" id="hint"></p>
+      <form id="unlock-form">
+        <div class="controls">
+          <input id="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" aria-label="Driecijferige ontgrendelcode" placeholder="Code">
+          <button type="submit">Ontgrendel</button>
+        </div>
+      </form>
+      <p class="message" id="message" role="status" aria-live="polite"></p>
+      <div class="finished" id="finished" role="status"></div>
+    </section>
+  </div>
+  <script>
+    /*
+     * Pas de cadeaus, hints, posities (percentages) en codes hieronder aan.
+     * Zet je eigen plattegrond.png naast index.html; zonder die afbeelding
+     * verschijnt automatisch de ingebouwde voorbeeldplattegrond.
+     * Tik vijf keer snel op de titel om de configuratiemodus te openen.
+     */
+    var gifts = [
+      { title: "Cadeau 1", hint: "Zoek bij de bank. En geef je vrouw dit keer niet meteen de schuld!", x: 27, y: 30, code: "123" },
+      { title: "Cadeau 2", hint: "In de buurt van de keuken misschien? Je eigen broekzak is al gecontroleerd.", x: 74, y: 29, code: "234" },
+      { title: "Cadeau 3", hint: "Kijk eens bij de tafel. De autosleutels zaten echt in jouw broekzak!", x: 36, y: 73, code: "345" },
+      { title: "Cadeau 4", hint: "Het laatste signaal komt van bij de kast. Je vrouw heeft een waterdicht alibi.", x: 77, y: 72, code: "456" }
+    ];
+
+    (function () {
+      var index = 0;
+      var adminActive = false;
+      var taps = [];
+      var markerX = gifts[0].x;
+      var markerY = gifts[0].y;
+      var app = document.getElementById("app");
+      var map = document.getElementById("map");
+      var image = document.getElementById("floorplan");
+      var radar = document.getElementById("radar");
+      var admin = document.getElementById("admin");
+      var coordinates = document.getElementById("coordinates");
+      var input = document.getElementById("code");
+      var message = document.getElementById("message");
+      var form = document.getElementById("unlock-form");
+      var audioContext;
+      var placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700"><rect width="1000" height="700" fill="#141416"/><rect x="50" y="45" width="900" height="610" rx="8" fill="#252528" stroke="#616166" stroke-width="12"/><path d="M500 45v610M50 350h900" fill="none" stroke="#616166" stroke-width="10"/><path d="M500 155v75M500 465v75M220 350h90M690 350h90" stroke="#252528" stroke-width="14"/><g fill="#38383c" stroke="#77777d" stroke-width="4"><rect x="130" y="125" width="240" height="100" rx="20"/><rect x="620" y="115" width="220" height="120" rx="8"/><rect x="160" y="465" width="200" height="110" rx="55"/><rect x="650" y="445" width="180" height="150" rx="6"/></g><g fill="#b4b4ba" font-family="Arial,sans-serif" font-size="26" text-anchor="middle"><text x="250" y="275">BANK</text><text x="730" y="275">KEUKEN</text><text x="260" y="625">TAFEL</text><text x="740" y="625">KAST</text></g></svg>';
+
+      function sizeApp() {
+        app.style.height = window.innerHeight + "px";
+        positionMarker(true);
+      }
+
+      function positionMarker(direct) {
+        var imageRect = image.getBoundingClientRect();
+        var mapRect = map.getBoundingClientRect();
+        if (!imageRect.width || !imageRect.height) {
+          return;
+        }
+        if (direct) {
+          radar.className = "radar direct";
+        }
+        radar.style.left = (imageRect.left - mapRect.left + imageRect.width * markerX / 100) + "px";
+        radar.style.top = (imageRect.top - mapRect.top + imageRect.height * markerY / 100) + "px";
+        if (direct) {
+          radar.offsetWidth;
+          radar.className = "radar";
+        }
+      }
+
+      function showGift() {
+        var gift = gifts[index];
+        document.getElementById("counter").textContent = "Signaal " + (index + 1) + " van " + gifts.length;
+        document.getElementById("gift-title").textContent = gift.title;
+        document.getElementById("hint").textContent = gift.hint;
+        markerX = gift.x;
+        markerY = gift.y;
+        positionMarker(false);
+      }
+
+      function playSound() {
+        var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        var oscillator;
+        var gain;
+        var now;
+        if (!AudioContextClass) {
+          return false;
+        }
+        try {
+          audioContext = audioContext || new AudioContextClass();
+          oscillator = audioContext.createOscillator();
+          gain = audioContext.createGain();
+          now = audioContext.currentTime;
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(660, now);
+          oscillator.frequency.setValueAtTime(880, now + 0.1);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          oscillator.start(now);
+          oscillator.stop(now + 0.3);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      image.onerror = function () {
+        image.onerror = null;
+        image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(placeholder);
+      };
+      image.onload = function () { positionMarker(true); };
+      if (image.complete && !image.naturalWidth) {
+        image.onerror();
+      }
+      window.addEventListener("resize", sizeApp);
+      window.addEventListener("orientationchange", function () { window.setTimeout(sizeApp, 300); });
+      document.getElementById("brand").addEventListener("click", function () {
+        var now = new Date().getTime();
+        taps.push(now);
+        while (taps.length && now - taps[0] > 3000) {
+          taps.shift();
+        }
+        if (taps.length >= 5) {
+          adminActive = true;
+          taps = [];
+          admin.className = "admin active";
+          coordinates.textContent = "CONFIGURATIEMODUS: tik op de plattegrond";
+          positionMarker(true);
+        }
+      });
+      document.getElementById("close-admin").addEventListener("click", function () {
+        adminActive = false;
+        taps = [];
+        admin.className = "admin";
+        positionMarker(true);
+      });
+      map.addEventListener("click", function (event) {
+        var rect;
+        if (!adminActive) {
+          return;
+        }
+        rect = image.getBoundingClientRect();
+        if (!rect.width || !rect.height || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+          coordinates.textContent = "CONFIGURATIEMODUS: tik binnen de plattegrond";
+          return;
+        }
+        markerX = Math.round((event.clientX - rect.left) / rect.width * 100);
+        markerY = Math.round((event.clientY - rect.top) / rect.height * 100);
+        coordinates.textContent = "CONFIGURATIEMODUS: x: " + markerX + ", y: " + markerY;
+        positionMarker(true);
+      });
+      form.addEventListener("submit", function (event) {
+        var soundWorked;
+        event.preventDefault();
+        if (!/^[0-9]{3}$/.test(input.value)) {
+          message.textContent = "Vul eerst een code van precies drie cijfers in.";
+          return;
+        }
+        if (input.value !== gifts[index].code) {
+          message.textContent = "Helaas! Misschien toch nog eens in je eigen broekzak kijken?";
+          input.value = "";
+          return;
+        }
+        soundWorked = playSound();
+        input.value = "";
+        input.blur();
+        message.textContent = soundWorked ? "" : "Geluid is niet beschikbaar op dit apparaat.";
+        index += 1;
+        if (index < gifts.length) {
+          showGift();
+        } else {
+          document.getElementById("counter").textContent = "Alle signalen gevonden";
+          document.getElementById("gift-title").textContent = "Alle cadeaus gevonden!";
+          document.getElementById("hint").textContent = "Zelfs zonder je vrouw de schuld te geven. Knap gedaan!";
+          form.style.display = "none";
+          document.getElementById("finished").textContent = "Gefeliciteerd en een heerlijke Sinterklaas!";
+          document.getElementById("finished").style.display = "block";
+        }
+      });
+      sizeApp();
+      showGift();
+    }());
+  </script>
+</body>
+</html>
