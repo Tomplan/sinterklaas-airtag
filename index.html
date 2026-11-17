@@ -9,7 +9,7 @@
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; background: #000; color: #fff; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
-    button, input { font: inherit; }
+    button, input, select, textarea { font: inherit; }
     .app { height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; overflow: hidden; }
     .admin { display: none; padding: 9px 16px; background: #ff9f0a; color: #241400; font-size: 15px; font-weight: bold; }
     .admin.active { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: space-between; justify-content: space-between; }
@@ -33,6 +33,16 @@
     .controls button { -webkit-flex: none; flex: none; height: 48px; margin-left: 10px; padding: 0 20px; border: 0; border-radius: 10px; background: #30d158; color: #062c10; font-weight: 700; cursor: pointer; }
     .message { min-height: 18px; margin: 8px 0 0; color: #ff9f0a; font-size: 13px; line-height: 1.3; }
     .finished { display: none; color: #30d158; font-size: 17px; line-height: 1.4; }
+    .editor { display: none; -webkit-flex: none; flex: none; max-height: 48%; overflow-y: auto; margin: 8px 16px 16px; padding: 16px; border-radius: 20px; background: #1c1c1e; -webkit-overflow-scrolling: touch; }
+    .editor.active { display: block; }
+    .editor h2 { margin: 0 0 8px; font-size: 19px; }
+    .editor p { margin: 6px 0 10px; color: #c7c7cc; font-size: 13px; line-height: 1.35; }
+    .editor label { display: block; margin-top: 10px; color: #c7c7cc; font-size: 13px; }
+    .editor input, .editor select, .editor textarea { display: block; width: 100%; margin-top: 4px; padding: 9px; border: 1px solid #48484a; border-radius: 8px; background: #2c2c2e; color: #fff; font-size: 16px; }
+    .editor textarea { min-height: 60px; resize: vertical; }
+    .editor button { margin-top: 12px; padding: 11px 16px; border: 0; border-radius: 9px; background: #30d158; color: #062c10; font-weight: bold; cursor: pointer; }
+    .editor button:disabled { opacity: .5; }
+    .editor .editor-message { color: #ffbf5b; white-space: pre-wrap; }
     @-webkit-keyframes glow { 50% { opacity: .5; } }
     @keyframes glow { 50% { opacity: .5; } }
     @-webkit-keyframes pulse { 0% { opacity: .7; -webkit-transform: scale(1); } 100% { opacity: 0; -webkit-transform: scale(3); } }
@@ -84,20 +94,42 @@
       <p class="message" id="message" role="status" aria-live="polite"></p>
       <div class="finished" id="finished" role="status"></div>
     </section>
+    <section class="editor" id="editor" aria-labelledby="editor-title">
+      <h2 id="editor-title">Cadeaus aanpassen</h2>
+      <p>Kies een cadeau, pas de gegevens aan en tik op de plattegrond voor de locatie. Publiceer als alles klaar is.</p>
+      <label>Cadeau
+        <select id="edit-select"></select>
+      </label>
+      <label>Titel
+        <input id="edit-title" type="text" maxlength="100">
+      </label>
+      <label>Hint
+        <textarea id="edit-hint" maxlength="500"></textarea>
+      </label>
+      <label>Code (drie cijfers)
+        <input id="edit-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off">
+      </label>
+      <p id="edit-position"></p>
+      <label>GitHub-token (wordt niet opgeslagen)
+        <input id="edit-token" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </label>
+      <button type="button" id="publish">Publiceer op GitHub</button>
+      <p class="editor-message" id="editor-message" role="status" aria-live="polite"></p>
+    </section>
   </div>
   <script>
     /*
-     * Pas de cadeaus, hints, posities (percentages) en codes hieronder aan.
+     * Pas de cadeaus hieronder aan of publiceer ze via de configuratiemodus.
      * Zet je eigen plattegrond.png naast index.html; zonder die afbeelding
      * verschijnt automatisch de ingebouwde voorbeeldplattegrond.
      * Tik vijf keer snel op de titel om de configuratiemodus te openen.
      */
-    var gifts = [
-      { title: "Cadeau 1", hint: "Zoek bij de bank. En geef je vrouw dit keer niet meteen de schuld!", x: 27, y: 30, code: "123" },
-      { title: "Cadeau 2", hint: "In de buurt van de keuken misschien? Je eigen broekzak is al gecontroleerd.", x: 74, y: 29, code: "234" },
-      { title: "Cadeau 3", hint: "Kijk eens bij de tafel. De autosleutels zaten echt in jouw broekzak!", x: 36, y: 73, code: "345" },
-      { title: "Cadeau 4", hint: "Het laatste signaal komt van bij de kast. Je vrouw heeft een waterdicht alibi.", x: 77, y: 72, code: "456" }
-    ];
+    var gifts = /* BEGIN GIFTS */[
+      {"title":"Cadeau 1","hint":"Zoek bij de bank. En geef je vrouw dit keer niet meteen de schuld!","x":27,"y":30,"code":"123"},
+      {"title":"Cadeau 2","hint":"In de buurt van de keuken misschien? Je eigen broekzak is al gecontroleerd.","x":74,"y":29,"code":"234"},
+      {"title":"Cadeau 3","hint":"Kijk eens bij de tafel. De autosleutels zaten echt in jouw broekzak!","x":36,"y":73,"code":"345"},
+      {"title":"Cadeau 4","hint":"Het laatste signaal komt van bij de kast. Je vrouw heeft een waterdicht alibi.","x":77,"y":72,"code":"456"}
+    ]/* END GIFTS */;
 
     (function () {
       var index = 0;
@@ -114,6 +146,19 @@
       var input = document.getElementById("code");
       var message = document.getElementById("message");
       var form = document.getElementById("unlock-form");
+      var panel = document.querySelector(".panel");
+      var editor = document.getElementById("editor");
+      var select = document.getElementById("edit-select");
+      var editTitle = document.getElementById("edit-title");
+      var editHint = document.getElementById("edit-hint");
+      var editCode = document.getElementById("edit-code");
+      var editPosition = document.getElementById("edit-position");
+      var editToken = document.getElementById("edit-token");
+      var editMessage = document.getElementById("editor-message");
+      var publishButton = document.getElementById("publish");
+      var draft;
+      var selected = 0;
+      var publishing = false;
       var audioContext;
       var placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700"><rect width="1000" height="700" fill="#141416"/><rect x="50" y="45" width="900" height="610" rx="8" fill="#252528" stroke="#616166" stroke-width="12"/><path d="M500 45v610M50 350h900" fill="none" stroke="#616166" stroke-width="10"/><path d="M500 155v75M500 465v75M220 350h90M690 350h90" stroke="#252528" stroke-width="14"/><g fill="#38383c" stroke="#77777d" stroke-width="4"><rect x="130" y="125" width="240" height="100" rx="20"/><rect x="620" y="115" width="220" height="120" rx="8"/><rect x="160" y="465" width="200" height="110" rx="55"/><rect x="650" y="445" width="180" height="150" rx="6"/></g><g fill="#b4b4ba" font-family="Arial,sans-serif" font-size="26" text-anchor="middle"><text x="250" y="275">BANK</text><text x="730" y="275">KEUKEN</text><text x="260" y="625">TAFEL</text><text x="740" y="625">KAST</text></g></svg>';
 
@@ -147,6 +192,158 @@
         markerX = gift.x;
         markerY = gift.y;
         positionMarker(false);
+      }
+
+      function copyGifts(source) {
+        return JSON.parse(JSON.stringify(source));
+      }
+
+      function updateDraft() {
+        draft[selected].title = editTitle.value;
+        draft[selected].hint = editHint.value;
+        draft[selected].code = editCode.value;
+      }
+
+      function showEditorGift() {
+        var gift = draft[selected];
+        editTitle.value = gift.title;
+        editHint.value = gift.hint;
+        editCode.value = gift.code;
+        editPosition.textContent = "Locatie: x: " + gift.x + ", y: " + gift.y;
+        markerX = gift.x;
+        markerY = gift.y;
+        positionMarker(true);
+      }
+
+      function startEditor() {
+        var i;
+        var option;
+        draft = copyGifts(gifts);
+        selected = index < gifts.length ? index : 0;
+        select.innerHTML = "";
+        for (i = 0; i < draft.length; i += 1) {
+          option = document.createElement("option");
+          option.value = i;
+          option.textContent = "Cadeau " + (i + 1);
+          select.appendChild(option);
+        }
+        select.value = String(selected);
+        panel.style.display = "none";
+        editor.className = "editor active";
+        editMessage.textContent = "";
+        showEditorGift();
+      }
+
+      function requestGitHub(method, token, body, callback) {
+        var request = new XMLHttpRequest();
+        request.open(method, "https://api.github.com/repos/Tomplan/sinterklaas-airtag/contents/index.html", true);
+        request.setRequestHeader("Accept", "application/vnd.github+json");
+        request.setRequestHeader("Authorization", "Bearer " + token);
+        if (body) {
+          request.setRequestHeader("Content-Type", "application/json");
+        }
+        request.timeout = 30000;
+        request.onload = function () {
+          var response;
+          try {
+            response = JSON.parse(request.responseText);
+          } catch (error) {
+            callback("GitHub gaf een ongeldig antwoord.");
+            return;
+          }
+          if (request.status < 200 || request.status >= 300) {
+            callback("GitHub-fout " + request.status + ": " + (response.message || "controleer je token en rechten."));
+            return;
+          }
+          callback(null, response);
+        };
+        request.onerror = function () { callback("Geen verbinding met GitHub. Controleer je internetverbinding."); };
+        request.ontimeout = function () { callback("GitHub reageert niet op tijd. Controleer vóór opnieuw publiceren of de wijziging al op GitHub staat."); };
+        request.send(body ? JSON.stringify(body) : null);
+      }
+
+      function finishPublishing(text) {
+        publishing = false;
+        publishButton.disabled = false;
+        select.disabled = false;
+        editTitle.disabled = false;
+        editHint.disabled = false;
+        editCode.disabled = false;
+        editToken.disabled = false;
+        editMessage.textContent = text;
+      }
+
+      function publish() {
+        var i;
+        var token;
+        var begin = "/* BEGIN " + "GIFTS */";
+        var end = "/* END " + "GIFTS */";
+        updateDraft();
+        for (i = 0; i < draft.length; i += 1) {
+          if (!draft[i].title.trim() || !draft[i].hint.trim() || !/^[0-9]{3}$/.test(draft[i].code)) {
+            editMessage.textContent = "Controleer cadeau " + (i + 1) + ": vul een titel, hint en code van drie cijfers in.";
+            return;
+          }
+        }
+        token = editToken.value.trim();
+        if (!token) {
+          editMessage.textContent = "Vul je GitHub-token in om te publiceren.";
+          return;
+        }
+        if (window.location.protocol !== "https:" || window.location.hostname !== "tomplan.github.io") {
+          editMessage.textContent = "Publiceren kan alleen vanaf de officiële HTTPS-pagina op tomplan.github.io.";
+          return;
+        }
+        editToken.value = "";
+        publishing = true;
+        publishButton.disabled = true;
+        select.disabled = true;
+        editTitle.disabled = true;
+        editHint.disabled = true;
+        editCode.disabled = true;
+        editToken.disabled = true;
+        editMessage.textContent = "Bezig met publiceren naar GitHub...";
+        requestGitHub("GET", token, null, function (error, response) {
+          var content;
+          var start;
+          var finish;
+          var remoteGifts;
+          var updated;
+          var encoded;
+          if (error) {
+            finishPublishing(error);
+            return;
+          }
+          try {
+            content = decodeURIComponent(escape(window.atob(response.content.replace(/\s/g, ""))));
+            start = content.indexOf(begin);
+            finish = content.indexOf(end, start + begin.length);
+            if (start < 0 || finish < 0 || content.indexOf(begin, start + begin.length) !== -1 || content.indexOf(end, finish + end.length) !== -1) {
+              throw new Error("De cadeau-markeringen ontbreken of zijn niet uniek.");
+            }
+            remoteGifts = JSON.parse(content.slice(start + begin.length, finish));
+            if (JSON.stringify(remoteGifts) !== JSON.stringify(gifts)) {
+              throw new Error("De cadeaus op GitHub zijn intussen gewijzigd. Vernieuw de pagina en probeer opnieuw; je huidige wijzigingen gaan daarbij verloren.");
+            }
+            updated = content.slice(0, start + begin.length) + JSON.stringify(draft, null, 2).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029") + content.slice(finish);
+            encoded = window.btoa(unescape(encodeURIComponent(updated)));
+          } catch (parseError) {
+            finishPublishing("Publiceren mislukt: " + parseError.message);
+            return;
+          }
+          requestGitHub("PUT", token, { message: "Pas cadeaus aan via configuratiemodus\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>", content: encoded, sha: response.sha, branch: "main" }, function (putError) {
+            if (putError) {
+              finishPublishing(putError);
+              return;
+            }
+            gifts = copyGifts(draft);
+            index = 0;
+            form.style.display = "";
+            document.getElementById("finished").style.display = "none";
+            message.textContent = "";
+            finishPublishing("Opgeslagen op GitHub! De website wordt bijgewerkt; dit kan enkele minuten duren.");
+          });
+        });
       }
 
       function playSound() {
@@ -194,22 +391,52 @@
           taps.shift();
         }
         if (taps.length >= 5) {
+          if (adminActive) {
+            return;
+          }
           adminActive = true;
           taps = [];
           admin.className = "admin active";
           coordinates.textContent = "CONFIGURATIEMODUS: tik op de plattegrond";
-          positionMarker(true);
+          startEditor();
         }
       });
       document.getElementById("close-admin").addEventListener("click", function () {
+        if (publishing) {
+          editMessage.textContent = "Wacht tot het publiceren klaar is.";
+          return;
+        }
+        if (JSON.stringify(draft) !== JSON.stringify(gifts) && !window.confirm("Niet-gepubliceerde wijzigingen weggooien?")) {
+          return;
+        }
         adminActive = false;
         taps = [];
         admin.className = "admin";
-        positionMarker(true);
+        editToken.value = "";
+        editor.className = "editor";
+        panel.style.display = "";
+        if (index < gifts.length) {
+          showGift();
+        } else {
+          positionMarker(true);
+        }
       });
+      select.addEventListener("change", function () {
+        updateDraft();
+        selected = Number(select.value);
+        showEditorGift();
+      });
+      editTitle.addEventListener("input", updateDraft);
+      editHint.addEventListener("input", updateDraft);
+      editCode.addEventListener("input", updateDraft);
+      publishButton.addEventListener("click", publish);
       map.addEventListener("click", function (event) {
         var rect;
         if (!adminActive) {
+          return;
+        }
+        if (publishing) {
+          editMessage.textContent = "Wacht tot het publiceren klaar is.";
           return;
         }
         rect = image.getBoundingClientRect();
@@ -219,6 +446,9 @@
         }
         markerX = Math.round((event.clientX - rect.left) / rect.width * 100);
         markerY = Math.round((event.clientY - rect.top) / rect.height * 100);
+        draft[selected].x = markerX;
+        draft[selected].y = markerY;
+        editPosition.textContent = "Locatie: x: " + markerX + ", y: " + markerY;
         coordinates.textContent = "CONFIGURATIEMODUS: x: " + markerX + ", y: " + markerY;
         positionMarker(true);
       });
